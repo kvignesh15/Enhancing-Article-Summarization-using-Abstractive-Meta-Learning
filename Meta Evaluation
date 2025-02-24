@@ -1,0 +1,49 @@
+def evaluate_model(model, data_loader, tokenizer):
+model.eval()
+scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"],␣
+↪use_stemmer=True)
+total_rouge = {
+"rouge1": {"precision": 0, "recall": 0, "f1": 0},
+"rouge2": {"precision": 0, "recall": 0, "f1": 0},
+
+"rougeL": {"precision": 0, "recall": 0, "f1": 0},
+}
+num_samples = 0
+with torch.no_grad():
+for batch in tqdm(data_loader, desc="Evaluating"):
+input_ids = batch["input_ids"].to(model.device)
+attention_mask = batch["attention_mask"].to(model.device)
+labels = batch["labels"]
+# Generate summaries
+generated_ids = model.generate(input_ids,␣
+↪attention_mask=attention_mask, max_length=128)
+generated_texts = tokenizer.batch_decode(generated_ids,␣
+↪skip_special_tokens=True)
+reference_texts = tokenizer.batch_decode(labels,␣
+↪skip_special_tokens=True)
+# Compute ROUGE scores
+for ref, gen in zip(reference_texts, generated_texts):
+scores = scorer.score(ref, gen)
+for key in total_rouge.keys():
+total_rouge[key]["precision"] += scores[key].precision
+total_rouge[key]["recall"] += scores[key].recall
+total_rouge[key]["f1"] += scores[key].fmeasure
+num_samples += 1
+# Compute the average scores
+avg_rouge = {
+key: {
+"precision": total_rouge[key]["precision"] / num_samples,
+"recall": total_rouge[key]["recall"] / num_samples,
+"f1": total_rouge[key]["f1"] / num_samples,
+}
+for key in total_rouge.keys()
+}
+# Print results in traditional format
+print("\nROUGE Scores:")
+for metric, scores in avg_rouge.items():
+print(f"{metric.upper()} - Precision: {scores['precision']:.4f}, Recall:
+↪ {scores['recall']:.4f}, F1-score: {scores['f1']:.4f}")
+return avg_rouge
+
+
+rouge_results = evaluate_model(maml_model, meta_test_loader, maml_tokenizer)
