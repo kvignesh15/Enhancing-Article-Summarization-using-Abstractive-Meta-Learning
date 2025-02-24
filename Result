@@ -1,0 +1,19 @@
+````Traditional Learning with high data samples````
+Evaluation Metrics:
+ROUGE1 - Precision: 0.28289406307855414, Recall: 0.37609117913634954, F1-score:
+0.3152299116667997
+ROUGE2 - Precision: 0.1054578594264912, Recall: 0.14104918621257406, F1-score:
+0.11763983277090026
+ROUGEL - Precision: 0.19906350405502668, Recall: 0.266200112771452, F1-score:
+0.2222821589157812
+
+```Meta Learning with small data samples```
+{rouge1': {'precision': 0.35353451806337854,
+'recall': 0.3877160705813453,
+'f1': 0.35783459653524324},
+'rouge2': {'precision': 0.14585591533322279,
+'recall': 0.15771790213848147,
+'f1': 0.1464047717008126},
+'rougeL': {'precision': 0.2425044543898082,
+'recall': 0.2690844932607845,
+'f1': 0.2467378872672124}}
