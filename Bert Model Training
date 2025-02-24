@@ -1,0 +1,68 @@
+#Used CNN DailyMail Data set to train
+scaler = torch.amp.GradScaler('cuda')
+tokenizer = AutoTokenizer.from_pretrained("facebook/bart-base")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-base").to(device)
+dataset = load_dataset('cnn_dailymail', '3.0.0', split='train')
+dataset = dataset.select(range(8000))
+
+
+def tokenize_function(example):
+inputs = tokenizer(example["article"], max_length=512,␣
+↪padding="max_length", truncation=True)
+labels = tokenizer(example["highlights"], max_length=128,␣
+↪padding="max_length", truncation=True)
+return {
+"input_ids": torch.tensor(inputs["input_ids"], dtype=torch.long),
+"attention_mask": torch.tensor(inputs["attention_mask"], dtype=torch.
+↪long),
+1
+"labels": torch.tensor(labels["input_ids"], dtype=torch.long),
+}
+tokenized_dataset = dataset.map(tokenize_function, batched=True,␣
+↪remove_columns=["article", "highlights"])
+tokenized_dataset.set_format(type="torch", columns=["input_ids",␣
+↪"attention_mask", "labels"])
+batch_size = 4
+data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
+data_loader = DataLoader(tokenized_dataset, batch_size=batch_size,␣
+↪shuffle=True, collate_fn=data_collator)
+print(len(data_loader))
+
+"labels": torch.tensor(labels["input_ids"], dtype=torch.long),
+}
+
+tokenized_dataset = dataset.map(tokenize_function, batched=True,␣
+↪remove_columns=["article", "highlights"])
+tokenized_dataset.set_format(type="torch", columns=["input_ids",␣
+↪"attention_mask", "labels"])
+batch_size = 4
+data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
+data_loader = DataLoader(tokenized_dataset, batch_size=batch_size,␣
+↪shuffle=True, collate_fn=data_collator)
+print(len(data_loader))
+
+
+def train_model(model, data_loader, max_batches=1000, lr=5e-5):
+model.train()
+optimizer = AdamW(model.parameters(), lr=lr)
+batch_count = 0
+progress_bar = tqdm(data_loader, desc="Training Progress",␣
+↪total=max_batches)
+for batch in progress_bar:
+if batch_count >= max_batches:
+break
+optimizer.zero_grad()
+batch = {k: v.to(device) for k, v in batch.items()}
+with torch.cuda.amp.autocast():
+outputs = model(**batch)
+loss = outputs.loss
+scaler.scale(loss).backward()
+scaler.step(optimizer)
+scaler.update()
+batch_count += 1
+progress_bar.set_postfix(loss=loss.item())
+print(f"Training completed. Processed {batch_count} batches.")
+model.save_pretrained(SAVE_PATH)
+tokenizer.save_pretrained(SAVE_PATH)
+
+
