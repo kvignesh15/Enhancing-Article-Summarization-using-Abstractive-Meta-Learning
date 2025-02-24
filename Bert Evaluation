@@ -1,0 +1,51 @@
+model_path = "save/"
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_path).to(device)
+
+
+
+datasetGlobal = load_dataset("cnn_dailymail", "3.0.0") # Use a subset for␣
+↪quick evaluation
+dataset = datasetGlobal['test'].select(range(1000))
+
+scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"],␣
+↪use_stemmer=True)
+
+
+def evaluate_model(model, tokenizer, dataset):
+model.eval()
+scores = {"rouge1": [], "rouge2": [], "rougeL": []}
+for sample in tqdm(dataset, desc="Evaluating"):
+article = sample["article"]
+reference_summary = sample["highlights"]
+# Tokenize input
+inputs = tokenizer(article, return_tensors="pt", max_length=512,␣
+↪truncation=True).to(model.device)
+# Generate summary
+with torch.no_grad():
+output_ids = model.generate(**inputs, max_length=128, num_beams=4,␣
+↪early_stopping=True)
+
+generated_summary = tokenizer.decode(output_ids[0],␣
+↪skip_special_tokens=True)
+# Compute ROUGE scores
+rouge_scores = scorer.score(reference_summary, generated_summary)
+for key in scores.keys():
+# print(key, rouge_scores[key])
+scores[key].append(rouge_scores[key])
+return scores
+
+
+print("\nEvaluation Metrics:")
+for rouge_type, scores in rouge_results.items():
+precision = 0.0
+recall = 0.0
+f1 = 0.0
+# print(scores[0])
+for score in scores:
+precision += score.precision
+recall += score.recall
+f1 += score.fmeasure
+print(f"{rouge_type.upper()} - Precision: {precision/len(scores)}, Recall:␣
+↪{recall/len(scores)}, F1-score: {f1/len(scores)}")
+
