@@ -1,0 +1,66 @@
+meta_train = datasetGlobal['train'].select(range(6000)) # 75% for meta-train
+meta_test = datasetGlobal['test'].select(range(2000)) # 25% for meta-test
+print(len(meta_test))
+
+meta_train = meta_train.map(tokenize_function, batched=True,␣
+↪remove_columns=["article", "highlights"])
+meta_test = meta_test.map(tokenize_function, batched=True,␣
+↪remove_columns=["article", "highlights"])
+meta_train.set_format(type="torch", columns=["input_ids", "attention_mask",␣
+↪"labels"])
+meta_test.set_format(type="torch", columns=["input_ids", "attention_mask",␣
+↪"labels"])
+# ￿ DataLoader
+batch_size = 2
+meta_train_loader = DataLoader(meta_train, batch_size=batch_size, shuffle=True)
+meta_test_loader = DataLoader(meta_test, batch_size=batch_size, shuffle=True)
+print(len(meta_train_loader))
+
+import higher
+def maml_train(model, meta_train_loader, meta_lr=1e-3, outer_lr=5e-5,␣
+↪inner_steps=3, meta_steps=500, batch_size=2):
+model.train()
+meta_optimizer = AdamW(model.parameters(), lr=outer_lr)
+scaler = torch.amp.GradScaler(device='cuda') # Mixed Precision for Memory␣
+↪Optimization
+progress_bar = tqdm(range(meta_steps), desc="MAML Training")
+for step in progress_bar:
+try:
+task_batch = next(iter(meta_train_loader)) # Sample batch
+task_batch = {k: v.to(device) for k, v in task_batch.items()}
+# Clone model for task-specific updates (memory efficient)
+with higher.innerloop_ctx(model, SGD(model.parameters(),␣
+↪lr=meta_lr), copy_initial_weights=False) as (fast_model, inner_optimizer):
+for _ in range(inner_steps):
+with torch.amp.autocast(device_type='cuda'): # Enable␣
+↪mixed precision
+inner_outputs = fast_model(**task_batch)
+inner_loss = inner_outputs.loss
+inner_optimizer.step(inner_loss) # ￿ No need for␣
+↪zero_grad()
+# Compute meta-loss (final step)
+with torch.amp.autocast(device_type='cuda'):
+meta_outputs = fast_model(**task_batch)
+meta_loss = meta_outputs.loss
+
+# ￿ Only backpropagate once in outer loop
+meta_optimizer.zero_grad()
+scaler.scale(meta_loss).backward()
+scaler.step(meta_optimizer)
+scaler.update()
+progress_bar.set_postfix(loss=meta_loss.item())
+except RuntimeError as e:
+if "CUDA out of memory" in str(e):
+print(f"Skipping step {step} due to OOM error.")
+torch.cuda.empty_cache() # Free up memory
+continue # Skip current step
+print("MAML Training Completed!")
+return model
+
+
+model = maml_train(model, meta_train_loader)
+# ￿ Save Model
+model.save_pretrained("maml_bart")
+tokenizer.save_pretrained("maml_bart")
+
+
